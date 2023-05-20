@@ -63,7 +63,15 @@ class LocalTime:
     print(f'RTC: {self.rtcTime}')
   def __setNtpTime(self, offsetHour: int) -> TimeTuple:
     time.sleep(1)
-    ntptime.settime()
+    try:
+      ntptime.settime()
+    except OSError as e:
+      if e.args[0] == 110:
+        # reset when OSError: [Errno 110] ETIMEDOUT
+        print(e)
+        time.sleep(5)
+        machine.reset()
+
     return self.TimeTuple(utime.localtime(utime.mktime(utime.localtime()) + offsetHour*3600))
   def __setRtc(self, t: TimeTuple) -> TimeTuple:
     machine.RTC().datetime((t.year, t.month, t.mday, t.weekday+1, t.hour, t.minute, t.second, 0))
