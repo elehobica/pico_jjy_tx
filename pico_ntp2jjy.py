@@ -84,15 +84,14 @@ class LocalTime:
       time.sleep_ms(1)
 
 # PIO program
-@rp2.asm_pio(set_init = rp2.PIO.OUT_LOW)
+@rp2.asm_pio(sideset_init = rp2.PIO.OUT_LOW)
 def oscillatorPioAsm():
-  # generate 1/4 frequency pulse against PIO clock with enable control
+  # generate 1/2 frequency pulse against PIO clock with enable control
   #  wait pin from in_base
-  #  set pin from set_base
+  #  sideset pin from sideset_base
   wrap_target()
-  wait(1, pin, 0)
-  set(pins, 1) [1]
-  set(pins, 0)
+  wait(1, pin, 0).side(0)
+  nop()          .side(1)
   wrap()
 
 # JJY class
@@ -107,7 +106,7 @@ class Jjy:
     self.__control(True)
     self.__control(False)
     # start PIO
-    sm = rp2.StateMachine(0, pioAsm, freq = self.freq*4, in_base = self.ctrlPins[0], set_base = self.modOutPin)
+    sm = rp2.StateMachine(0, pioAsm, freq = self.freq*2, in_base = self.ctrlPins[0], sideset_base = self.modOutPin)
     sm.active(True)
   def __control(self, enable: bool) -> None:
     for ctrlPin in self.ctrlPins:
@@ -234,7 +233,7 @@ class Jjy:
       self.__sendTimecode(vector[t.second:])  # apply offset (should be only for the first time)
 
 def main() -> bool:
-  machine.freq(96000000)  # multiplier of 40000*4 and 60000*4 to avoid jitter
+  machine.freq(96000000)  # recommend multiplier of 40000*2 and 60000*2 to avoid jitter
   led = machine.Pin("LED", machine.Pin.OUT)
   led.off()
   # connect WiFi
