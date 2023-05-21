@@ -6,7 +6,7 @@ This project is for JJY signal emulator for Raspberry Pi Pico W
 This project supports:
 * Fetch JST time by NTP
 * Generate JJY signal
-* JJY Carrier frequency is configurable for 40 KHz or 60 KHz
+* JJY carrier frequency is configurable for 40 KHz or 60 KHz
 
 About JJY, please refer to [https://jjy.nict.go.jp/jjy/trans/index.html](https://jjy.nict.go.jp/jjy/trans/index.html)
 
@@ -27,7 +27,7 @@ About JJY, please refer to [https://jjy.nict.go.jp/jjy/trans/index.html](https:/
 ## How to make the program work
 * Use [Thonny](https://thonny.org/) or similar MicroPython IDE
 * Install MicroPython (Raspberry Pi Pico) interpreter firmware on Raspberry Pi Pico W by Thonny
-* Edit `secrets.py` to include your WiFi configuration and put it on the storage of Raspberry Pi Pico W
+* Add `secrets.py` to include your WiFi configuration and put it on the storage of Raspberry Pi Pico W
 ```
 # secrets.py
 secrets = {

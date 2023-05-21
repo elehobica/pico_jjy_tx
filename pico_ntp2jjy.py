@@ -38,9 +38,16 @@ from secrets import secrets
 # JST offset
 TZ_JST_OFS = 9
 
+# JJY carrier frequency 40000 or 60000 Hz
+JJY_CARRIER_FREQ = 40000
+
 # Pin Configuration
 PIN_MOD = 2   # modulation (output for PIO)
 PIN_CTRL = 3  # control (output for GPIO, input for PIO)
+
+# Seconds to run until re-sync with NTP
+# infinite if SEC_TO_RUN == 0
+SEC_TO_RUN = 60 * 60 * 24 * 7 // 2  # half week is the maximum
 
 def connectWifi():
   ssid = secrets['ssid']
@@ -235,7 +242,8 @@ class Jjy:
         pulseWidth = 0.2
       time.sleep(pulseWidth)
       self.__control(False)
-  def run(self):
+  def run(self, secToRun: int = 0):
+    ticksTimeout = time.ticks_add(time.ticks_ms(), secToRun * 1000)
     print(f'start JJY emission at {self.freq} Hz')
     self.lcTime.alignSecondEdge()
     time.sleep(0.2)  # to make same condition as marker P0
@@ -244,6 +252,9 @@ class Jjy:
       vector = self.__genTimecode(t)
       print(f'Timecode: {t}')
       self.__sendTimecode(vector[t.second:])  # apply offset (should be only for the first time)
+      if secToRun > 0 and time.ticks_diff(time.ticks_ms(), ticksTimeout) > 0:
+        print(f'Finished {secToRun}+ sec.')
+        break
 
 def main() -> bool:
   machine.freq(96000000)  # recommend multiplier of 40000*2 and 60000*2 to avoid jitter
@@ -263,12 +274,15 @@ def main() -> bool:
   # JJY
   jjy = Jjy(
     lcTime = lcTime,
-    freq = 40000,  # 40000 or 60000
+    freq = JJY_CARRIER_FREQ,
     ctrlPins = (machine.Pin(PIN_CTRL, machine.Pin.OUT), led),
     modOutPin = machine.Pin(PIN_MOD, machine.Pin.OUT),
     pioAsm = oscillatorPioAsm,
   )
-  jjy.run()  # infinite loop
+  jjy.run(SEC_TO_RUN)
+  print('System reset to sync NTP again')
+  time.sleep(5)
+  machine.reset()
   return True
 
 if __name__ == '__main__':
