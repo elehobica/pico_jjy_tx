@@ -124,22 +124,14 @@ class Jjy:
     self.freq = freq # 40000 or 60000 (Hz)
     self.ctrlPins = ctrlPins  # for pulse control output (could be multiple, but PIO accepts only [0] as control input)
     self.modOutPin = modOutPin  # for modulation output
+    self.pioAsm = pioAsm
     # dummy toggle because it spends much time (more than 0.6 sec) at first time
     self.__control(False)
     self.__control(True)
     self.__control(False)
-    # start PIO
-    sm = rp2.StateMachine(0, pioAsm, freq = self.freq*2, in_base = self.ctrlPins[0], sideset_base = self.modOutPin)
-    sm.active(True)
   def __control(self, enable: bool) -> None:
     for ctrlPin in self.ctrlPins:
       ctrlPin.value(enable)
-  def __resetVector(self):
-    self.__vector = []
-  def __appendVector(self, value: int):
-    self.__vector.append(value)
-  def __getVector(self):
-    return self.__vector
   def __genTimecode(self, t: LocalTime.TimeTuple) -> list:
     ## Timecode1 (exept for 15, 45 min) ##
     # 00: marker M
@@ -176,60 +168,37 @@ class Jjy:
     # 80, 40, 20, 10: 10's digit
     # 8, 4, 2, 1    : 1's digit
 
-    self.__resetVector()
-    isTimecode1 = not (t.minute == 15 or t.minute == 45)
-    self.__addMarker()  # marker M
-    pa2 = self.__addBcd(t.minute // 10, 3)
-    self.__addBin(0)
-    pa2 += self.__addBcd(t.minute)
-    self.__addMarker()  # marker P1
-    self.__addBin(0, 2)
-    pa1 = self.__addBcd(t.hour // 10, 2)
-    self.__addBin(0)
-    pa1 += self.__addBcd(t.hour)
-    self.__addMarker()  # marker P2
-    self.__addBin(0, 2)
-    self.__addBcd(t.yearday // 100, 2)
-    self.__addBin(0)
-    self.__addBcd(t.yearday // 10)
-    self.__addMarker()  # marker P3
-    self.__addBcd(t.yearday)
-    self.__addBin(0, 2)
-    self.__addBin(pa1) # PA1
-    self.__addBin(pa2) # PA2
-    if isTimecode1:
-      self.__addBin(0) # SU1
-      self.__addMarker()  # marker P4
-      self.__addBin(0) # SU2
-      self.__addBcd(t.year // 10)
-      self.__addBcd(t.year)
-      self.__addMarker()  # marker P5
-      self.__addBcd((t.weekday + 1) % 7, 3)
-      self.__addBin(0) # LS1
-      self.__addBin(0) # LS2
-      self.__addBin(0, 4)
+    vector = []
+    # 0 ~ 9
+    vector += self.__marker(name='M') + self.__bcd(t.minute // 10, 3) + self.__bin(0) + self.__bcd(t.minute) + self.__marker(name='P1')
+    # 10 ~ 19
+    vector += self.__bin(0, 2) + self.__bcd(t.hour // 10, 2) + self.__bin(0) + self.__bcd(t.hour) + self.__marker(name='P2')
+    # 20 ~ 29
+    vector += self.__bin(0, 2) + self.__bcd(t.yearday // 100, 2) + self.__bin(0) + self.__bcd(t.yearday // 10) + self.__marker(name='P3')
+    # Parity
+    pa1 = sum(vector[12:14] + vector[15:19])
+    pa2 = sum(vector[1:4] + vector[5:9])
+    if not (t.minute == 15 or t.minute == 45):
+      # 30 ~ 39
+      vector += self.__bcd(t.yearday) + self.__bin(0, 2) + self.__bin(pa1) + self.__bin(pa2) + self.__bin(0, name='SU1') + self.__marker(name='P4')
+      # 40 ~ 49
+      vector += self.__bin(0, name='SU2') + self.__bcd(t.year // 10) + self.__bcd(t.year) + self.__marker(name='P5')
+      # 50 ~ 59
+      vector += self.__bcd((t.weekday + 1) % 7, 3) + self.__bin(0, name='LS1') + self.__bin(0, name='LS2') + self.__bin(0, 4) + self.__marker(name='P0')
     else:
-      self.__addBin(0)
-      self.__addMarker()  # marker P4
-      self.__addBin(0, 9) # Call Signals
-      self.__addMarker()  # marker P5
-      self.__addBin(0, 6) # ST1 ~ ST6
-      self.__addBin(0, 3)
-    self.__addMarker()  # marker P0
-    return self.__getVector()
-  def __addMarker(self) -> None:
-    self.__appendVector(2)
-  def __addBcd(self, value: int, numDigits: int = 4) -> int:
-    parity = 0
-    value = value % 10
-    for bitPos in range(numDigits-1, -1, -1):
-      bit = (value >> bitPos) & 0b1
-      self.__appendVector(bit)
-      parity += bit
-    return parity
-  def __addBin(self, value: int, count: int = 1) -> None:
-    for i in range(count):
-      self.__appendVector(value & 0b1)
+      # 30 ~ 39
+      vector += self.__bcd(t.yearday) + self.__bin(0, 2) + self.__bin(pa1) + self.__bin(pa2) + self.__bin(0) + self.__marker(name='P4')
+      # 40 ~ 49
+      vector += self.__bin(0, 9, name='Call') + self.__marker(name='P5')
+      # 50 ~ 59
+      vector += self.__bin(0, 6, name='ST1-ST6') + self.__bin(0, 3) + self.__marker(name='P0')
+    return vector
+  def __marker(self, **kwargs: dict) -> list:
+    return [2]
+  def __bcd(self, value: int, numDigits: int = 4, **kwargs: dict) -> list:
+    return [((value % 10) >> bitPos) & 0b1 for bitPos in range(numDigits-1, -1, -1)]
+  def __bin(self, value: int, count: int = 1, **kwargs: dict) -> None:
+    return [value & 0b1] * count
   def __sendTimecode(self, vector: list) -> None:
     for value in vector:
       self.lcTime.alignSecondEdge()
@@ -244,6 +213,10 @@ class Jjy:
       self.__control(False)
   def run(self, secToRun: int = 0):
     ticksTimeout = time.ticks_add(time.ticks_ms(), secToRun * 1000)
+    # start PIO
+    sm = rp2.StateMachine(0, self.pioAsm, freq = self.freq*2, in_base = self.ctrlPins[0], sideset_base = self.modOutPin)
+    sm.active(True)
+    # start modulation
     print(f'start JJY emission at {self.freq} Hz')
     self.lcTime.alignSecondEdge()
     time.sleep(0.2)  # to make same condition as marker P0
