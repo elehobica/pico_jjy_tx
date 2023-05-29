@@ -42,8 +42,8 @@ TZ_JST_OFS = 9
 JJY_CARRIER_FREQ = 40000
 
 # Pin Configuration
-PIN_MOD = 2   # modulation (output for PIO)
-PIN_CTRL = 3  # control (output for GPIO, input for PIO)
+PIN_MOD_BASE = 2   # modulation P (output for PIO), modulation N for succeeding pin
+PIN_CTRL = 4  # control (output for GPIO, input for PIO)
 
 # Seconds to run until re-sync with NTP
 # infinite if SEC_TO_RUN == 0
@@ -107,23 +107,32 @@ class LocalTime:
       time.sleep_ms(1)
 
 # PIO program
-@rp2.asm_pio(sideset_init = rp2.PIO.OUT_LOW)
+@rp2.asm_pio(sideset_init = (rp2.PIO.OUT_LOW, rp2.PIO.OUT_LOW))
 def oscillatorPioAsm():
   # generate 1/2 frequency pulse against PIO clock with enable control
-  #  wait pin from in_base
+  #  jmp pin from jmp_pin
   #  sideset pin from sideset_base
+
+  P = 0b01  # drive +
+  N = 0b10  # drive -
+  Z = 0b00  # drive zero
+
+  #                         # addr
+  label('loop')
+  nop()           .side(P)  # 29
+  jmp(pin, 'loop').side(N)  # 30
   wrap_target()
-  wait(1, pin, 0).side(0)
-  nop()          .side(1)
+  label('entryPoint')
+  jmp(pin, 'loop').side(Z)  # 31
   wrap()
 
 # JJY class
 class Jjy:
-  def __init__(self, lcTime: LocalTime, freq: int, ctrlPins: tuple(machine.Pin), modOutPin: machine.Pin, pioAsm: Callable):
+  def __init__(self, lcTime: LocalTime, freq: int, ctrlPins: tuple(machine.Pin), modOutPinBase: machine.Pin, pioAsm: Callable):
     self.lcTime = lcTime
     self.freq = freq # 40000 or 60000 (Hz)
     self.ctrlPins = ctrlPins  # for pulse control output (could be multiple, but PIO accepts only [0] as control input)
-    self.modOutPin = modOutPin  # for modulation output
+    self.modOutPinBase = modOutPinBase  # for modulation output
     self.pioAsm = pioAsm
     # dummy toggle because it spends much time (more than 0.6 sec) at first time
     self.__control(False)
@@ -212,9 +221,14 @@ class Jjy:
           pulseWidth = 0.2
         time.sleep(pulseWidth)
         self.__control(False)
+    # run
     ticksTimeout = time.ticks_add(time.ticks_ms(), secToRun * 1000)
     # start PIO
-    sm = rp2.StateMachine(0, self.pioAsm, freq = self.freq*2, in_base = self.ctrlPins[0], sideset_base = self.modOutPin)
+    sm = rp2.StateMachine(0, self.pioAsm, freq = self.freq*2, jmp_pin = self.ctrlPins[0], sideset_base = self.modOutPinBase)
+    sm.active(False)
+    entryPoint = 31
+    sm.exec(f'set(y, {entryPoint})')
+    sm.exec('mov(pc, y)')
     sm.active(True)
     # start modulation
     print(f'start JJY emission at {self.freq} Hz')
@@ -233,6 +247,8 @@ def main() -> bool:
   machine.freq(96000000)  # recommend multiplier of 40000*2 and 60000*2 to avoid jitter
   led = machine.Pin("LED", machine.Pin.OUT)
   led.off()
+  modOutP = machine.Pin(PIN_MOD_BASE, machine.Pin.OUT)
+  modOutN = machine.Pin(PIN_MOD_BASE + 1, machine.Pin.OUT)
   # connect WiFi
   if not connectWifi():
     return False
@@ -249,7 +265,7 @@ def main() -> bool:
     lcTime = lcTime,
     freq = JJY_CARRIER_FREQ,
     ctrlPins = (machine.Pin(PIN_CTRL, machine.Pin.OUT), led),
-    modOutPin = machine.Pin(PIN_MOD, machine.Pin.OUT),
+    modOutPinBase = modOutP,
     pioAsm = oscillatorPioAsm,
   )
   jjy.run(SEC_TO_RUN)
