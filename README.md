@@ -1,7 +1,7 @@
-# NTP to JJY for Raspberry Pi Pico W
+# JJY transmitter for Raspberry Pi Pico W
 
 ## Overview
-This project is for JJY signal emulator for Raspberry Pi Pico W
+This project is JJY transmitter for Raspberry Pi Pico W in proximate usage
 
 This project supports:
 * Fetch JST time by NTP
@@ -23,7 +23,7 @@ About JJY, please refer to [https://jjy.nict.go.jp/jjy/trans/index.html](https:/
 |  6 | GP4 | PIN_CTRL | Control Output (option for external carrier generator) |
 
 ## Connection Diagram
-![Connection Diagram](doc/pico_ntp2jjy_connection.png)
+![Connection Diagram](doc/pico_jjy_tx_connection.png)
 
 ## How to make the program work
 * Use [Thonny](https://thonny.org/) or similar MicroPython IDE (Confirmed with Thonny 4.0.2, Python 3.10.9)
@@ -36,8 +36,8 @@ secrets = {
   "password": 'xxxx',
 }
 ```
-* Excecute `pico_ntp2jjy.py` from Thonny
-* For stand-alone application, please rename `pico_ntp2jjy.py` as `main.py` and store in the storage of Raspberry Pi Pico W
+* Excecute `pico_jjy_tx.py` from Thonny
+* For stand-alone application, please rename `pico_jjy_tx.py` as `main.py` and store in the storage of Raspberry Pi Pico W
 
 ## Tips for emitting JJY
 * The easiest way to make the clock detect JJY emulated singal in small room environment, is just to connect wired earphone between PIN_MOD_P and PIN_MOD_N pins and put the clock near the earphone cable. (This could damage the earphone. please try with cheaper one.)
