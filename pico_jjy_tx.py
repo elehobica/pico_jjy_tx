@@ -1,5 +1,4 @@
-# NTP to JJY
-#  for Raspberry Pi Pico W
+# JJY transmitter for Raspberry Pi Pico W
 # ------------------------------------------------------
 # Copyright (c) 2023, Elehobica
 #
@@ -27,7 +26,6 @@
 
 import machine
 import rp2
-import time 
 import utime
 import network
 import ntptime
@@ -60,7 +58,7 @@ def connectWifi():
     if wlan.isconnected():
       print('WiFi connected')
       break
-    time.sleep(1)
+    utime.sleep(1)
   else:
     print('WiFi not connected')
     return False
@@ -85,26 +83,26 @@ class LocalTime:
     self.rtcTime = self.__setRtc(self.ntpTime)
     print(f'RTC: {self.rtcTime}')
   def __setNtpTime(self, offsetHour: int) -> TimeTuple:
-    time.sleep(1)
+    utime.sleep(1)
     try:
       ntptime.settime()
     except OSError as e:
       if e.args[0] == 110:
         # reset when OSError: [Errno 110] ETIMEDOUT
         print(e)
-        time.sleep(5)
+        utime.sleep(5)
         machine.reset()
     return self.TimeTuple(utime.localtime(utime.mktime(utime.localtime()) + offsetHour*3600))
   def __setRtc(self, t: TimeTuple) -> TimeTuple:
     machine.RTC().datetime((t.year, t.month, t.mday, t.weekday+1, t.hour, t.minute, t.second, 0))
-    time.sleep(1)  # wait to be reflected
-    return self.TimeTuple(time.localtime())
+    utime.sleep(1)  # wait to be reflected
+    return self.TimeTuple(utime.localtime())
   def now(self, offset: int = 0) -> TimeTuple:
-    return self.TimeTuple(time.localtime(time.time() + offset))
+    return self.TimeTuple(utime.localtime(utime.time() + offset))
   def alignSecondEdge(self):
     t = self.now()
     while t.second == self.now().second:
-      time.sleep_ms(1)
+      utime.sleep_ms(1)
 
 # PIO program
 @rp2.asm_pio(sideset_init = (rp2.PIO.OUT_LOW, rp2.PIO.OUT_LOW))
@@ -219,10 +217,10 @@ class Jjy:
           pulseWidth = 0.5
         else:  # marker
           pulseWidth = 0.2
-        time.sleep(pulseWidth)
+        utime.sleep(pulseWidth)
         self.__control(False)
     # run
-    ticksTimeout = time.ticks_add(time.ticks_ms(), secToRun * 1000)
+    ticksTimeout = utime.ticks_add(utime.ticks_ms(), secToRun * 1000)
     # start PIO
     sm = rp2.StateMachine(0, self.pioAsm, freq = self.freq*2, jmp_pin = self.ctrlPins[0], sideset_base = self.modOutPinBase)
     sm.active(False)
@@ -233,13 +231,13 @@ class Jjy:
     # start modulation
     print(f'start JJY emission at {self.freq} Hz')
     self.lcTime.alignSecondEdge()
-    time.sleep(0.2)  # to make same condition as marker P0
+    utime.sleep(0.2)  # to make same condition as marker P0
     while True:
       t = self.lcTime.now(1)  # time for next second
       vector = genTimecode(t)
       print(f'Timecode: {t}')
       sendTimecode(vector[t.second:])  # apply offset (should be only for the first time)
-      if secToRun > 0 and time.ticks_diff(time.ticks_ms(), ticksTimeout) > 0:
+      if secToRun > 0 and utime.ticks_diff(utime.ticks_ms(), ticksTimeout) > 0:
         print(f'Finished {secToRun}+ sec.')
         break
 
@@ -254,7 +252,7 @@ def main() -> bool:
     return False
   # LED sign for WiFi connection
   for i in range(2 * 3):
-    time.sleep(0.1)
+    utime.sleep(0.1)
     led.toggle()
   # NTP/RTC setting
   lcTime = LocalTime(TZ_JST_OFS)
@@ -270,7 +268,7 @@ def main() -> bool:
   )
   jjy.run(SEC_TO_RUN)
   print('System reset to sync NTP again')
-  time.sleep(5)
+  utime.sleep(5)
   machine.reset()
   return True
 

@@ -32,8 +32,8 @@ About JJY, please refer to [https://jjy.nict.go.jp/jjy/trans/index.html](https:/
 ```
 # secrets.py
 secrets = {
-  "ssid": 'xxxx',
-  "password": 'xxxx',
+  'ssid': 'xxxx',
+  'password': 'xxxx',
 }
 ```
 * Excecute `pico_jjy_tx.py` from Thonny
